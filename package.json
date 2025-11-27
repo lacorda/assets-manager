@@ -1,0 +1,33 @@
+{
+  "name": "assets-manager",
+  "version": "0.1.0",
+  "description": "Webpack 插件：扫描项目本地图片资源并生成报告",
+  "license": "MIT",
+  "main": "dist/index.js",
+  "module": "dist/index.esm.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "father build"
+  },
+  "engines": {
+    "node": ">=14"
+  },
+  "peerDependencies": {
+    "webpack": ">=5"
+  },
+  "keywords": [
+    "webpack",
+    "plugin",
+    "assets",
+    "images",
+    "report"
+  ],
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "father": "^4.6.8",
+    "typescript": "^5.9.3"
+  }
+}
