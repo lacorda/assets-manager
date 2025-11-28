@@ -1,6 +1,6 @@
 {
   "name": "@lacorda/assets-manager",
-  "version": "0.1.6",
+  "version": "0.0.1",
   "description": "Webpack 插件：扫描项目本地图片资源并生成报告",
   "license": "MIT",
   "main": "dist/index.cjs",

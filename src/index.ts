@@ -75,37 +75,29 @@ function scanImages(
       const p = path.join(dir, ent.name);
       // 计算当前文件/目录的相对路径，相对于root目录
       const rel = path.relative(root, p);
-      console.log("[AssetsManager] 检查目录项", p);
 
       // 如果是目录
       if (ent.isDirectory()) {
-        console.log("[AssetsManager] 是目录", p);
-
         // 如果目录名不在忽略列表中，且未命中 .gitignore 规则
         if (!ignoreNames.has(ent.name) && !matchGitignore(rel)) {
-          console.log("[AssetsManager] 目录未忽略，继续深入", p);
           stack.push(p);
         } else {
-          console.log("[AssetsManager] 目录被忽略", ent.name);
         }
         continue;
       }
 
       // 如果不是文件
       if (!ent.isFile()) {
-        console.log("[AssetsManager] 非文件，跳过", p);
         continue;
       }
 
       // 如果命中 .gitignore 规则
       if (matchGitignore(rel)) {
-        console.log("[AssetsManager] 命中 .gitignore，跳过", rel);
         continue;
       }
 
       // 如果不是图片类型
       if (!isImage(p, exts)) {
-        console.log("[AssetsManager] 非图片类型，跳过", p);
         continue;
       }
 
@@ -118,7 +110,6 @@ function scanImages(
       }
 
       if (!stat) {
-        console.log("[AssetsManager] 读取文件信息失败，跳过", p);
         continue;
       }
 
@@ -130,12 +121,6 @@ function scanImages(
         relativePath: path.relative(root, p),
         size: stat.size,
       });
-
-      console.log(
-        "[AssetsManager] 记录图片",
-        path.relative(root, p),
-        `${stat.size} bytes`
-      );
     }
   }
   return results;
@@ -149,14 +134,12 @@ function collectUsedImages(compilation: any, exts: string[]): Set<string> {
   for (const m of mods) {
     const r = (m && (m.resource || (m as any).request)) as string | undefined;
     if (!r) {
-      console.log("[AssetsManager] 模块无资源路径，跳过");
       continue;
     }
 
     if (isImage(r, exts)) {
       const abs = path.resolve(r);
       used.add(abs);
-      console.log("[AssetsManager] 模块使用图片", abs);
     }
   }
 
@@ -171,7 +154,6 @@ function collectUsedImages(compilation: any, exts: string[]): Set<string> {
     if (src && isImage(src, exts)) {
       const abs = path.resolve(src);
       used.add(abs);
-      console.log("[AssetsManager] 资产使用图片", abs);
     }
   }
   return used;
@@ -180,7 +162,6 @@ function collectUsedImages(compilation: any, exts: string[]): Set<string> {
 function formatSize(size: number): string {
   const kb = size / 1024;
   if (kb < 1024) {
-    console.log("[AssetsManager] 格式化大小为KB", `${kb.toFixed(2)} KB`);
     return `${kb.toFixed(2)} KB`;
   }
   return `${(kb / 1024).toFixed(2)} MB`;
@@ -189,32 +170,48 @@ function formatSize(size: number): string {
 function buildHtml(
   all: ImageInfo[],
   used: Set<string>,
-  mode: "static" | "watch"
+  mode: "static" | "watch",
+  projectName: string,
+  faviconHref: string
 ) {
   const total = all.reduce((s, i) => s + i.size, 0);
   const usedList = all.filter((i) => used.has(i.absolutePath));
   const unusedList = all.filter((i) => !used.has(i.absolutePath));
   const totalUsed = usedList.reduce((s, i) => s + i.size, 0);
   const totalUnused = unusedList.reduce((s, i) => s + i.size, 0);
-  const rows = all
+  const usedRows = usedList
     .map((i) => {
-      const isUnused = !used.has(i.absolutePath);
-      const color = isUnused ? "green" : "inherit";
-      const status = isUnused ? "未使用" : "已使用";
-      return `<tr style="color:${color}"><td>${
+      const previewSrc =
+        mode === "watch"
+          ? `/preview?path=${encodeURIComponent(i.absolutePath)}`
+          : `file://${i.absolutePath}`;
+      return `<tr><td><img src="${previewSrc}" alt="" style="max-width:64px;max-height:64px;object-fit:contain" /></td><td>${
         i.relativePath
-      }</td><td>${formatSize(i.size)}</td><td>${status}</td></tr>`;
+      }</td><td>${formatSize(i.size)}</td><td>已使用</td></tr>`;
+    })
+    .join("");
+  const unusedRows = unusedList
+    .map((i) => {
+      const previewSrc =
+        mode === "watch"
+          ? `/preview?path=${encodeURIComponent(i.absolutePath)}`
+          : `file://${i.absolutePath}`;
+      return `<tr style="color:green"><td><img src="${previewSrc}" alt="" style="max-width:64px;max-height:64px;object-fit:contain" /></td><td>${
+        i.relativePath
+      }</td><td>${formatSize(i.size)}</td><td>未使用</td></tr>`;
     })
     .join("");
   const refreshMeta =
     mode === "watch" ? '<meta http-equiv="refresh" content="2">' : "";
-  const html = `<!doctype html><html><head><meta charset="utf-8">${refreshMeta}<title>Assets Manager Report</title><style>body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:8px}th{background:#f7f7f7;text-align:left}</style></head><body><h1>图片资源报告</h1><ul><li>全部大小：${formatSize(
+  const html = `<!doctype html><html><head><meta charset="utf-8">${refreshMeta}<link rel="icon" href="${faviconHref}"><title>${projectName} - 图片资源管理</title><style>body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:8px}th{background:#f7f7f7;text-align:left}</style></head><body><h1>图片资源报告</h1><ul><li>全部大小：${formatSize(
     total
   )}</li><li>已使用大小：${formatSize(
     totalUsed
-  )}</li><li>未使用大小：${formatSize(
-    totalUnused
-  )}</li></ul><table><thead><tr><th>路径</th><th>大小</th><th>状态</th></tr></thead><tbody>${rows}</tbody></table></body></html>`;
+  )}</li><li>未使用大小：${formatSize(totalUnused)}</li><li>全部数量：${
+    all.length
+  }</li><li>已使用数量：${usedList.length}</li><li>未使用数量：${
+    unusedList.length
+  }</li></ul><table><thead><tr><th>预览</th><th>路径</th><th>大小</th><th>状态</th></tr></thead><tbody>${usedRows}${unusedRows}</tbody></table></body></html>`;
   return html;
 }
 
@@ -232,14 +229,7 @@ function openFileInBrowser(file: string) {
     cmd = "xdg-open";
     args = [file];
   }
-  console.log(
-    "[AssetsManager] 打开报告",
-    file,
-    "命令",
-    cmd,
-    "参数",
-    args.join(" ")
-  );
+
   try {
     const child = spawn(cmd, args, { stdio: "ignore", detached: true });
     child.unref();
@@ -283,7 +273,6 @@ export class AssetsManagerPlugin {
       // 生成报告
       const generate = (comp: any) => {
         const root = compiler.context || process.cwd();
-        console.log("[AssetsManager] 项目根路径", root);
 
         const defaultIgnore = ["node_modules", ".git", "dist"];
         const ignoreNames = new Set(
@@ -302,10 +291,6 @@ export class AssetsManagerPlugin {
               .map((s) => s.trim())
               .filter((s) => s && !s.startsWith("#") && !s.startsWith("!"))
               .map((s) => s.replace(/\\/g, "/"));
-            console.log(
-              "[AssetsManager] 载入 .gitignore 规则",
-              gitPatterns.length
-            );
           }
         } catch {}
 
@@ -319,6 +304,17 @@ export class AssetsManagerPlugin {
         const totalUsed = usedList.reduce((s, i) => s + i.size, 0);
         const totalUnused = unusedList.reduce((s, i) => s + i.size, 0);
 
+        let projectName = path.basename(root);
+        try {
+          const pkgPath = path.join(root, "package.json");
+          if (fs.existsSync(pkgPath)) {
+            const raw = fs.readFileSync(pkgPath, "utf8");
+            const pkg = JSON.parse(raw);
+            if (pkg && typeof pkg.name === "string" && pkg.name.trim()) {
+              projectName = pkg.name.trim();
+            }
+          }
+        } catch {}
         const jsonObj = {
           allImages: all.map((i) => ({ path: i.relativePath, size: i.size })),
           usedImages: usedList.map((i) => ({
@@ -330,9 +326,35 @@ export class AssetsManagerPlugin {
             size: i.size,
           })),
           totals: { all: total, used: totalUsed, unused: totalUnused },
+          counts: {
+            all: all.length,
+            used: usedList.length,
+            unused: unusedList.length,
+          },
         };
 
-        const html = buildHtml(all, used, mode);
+        // favicon 处理：优先使用本地 src/favicon.icon 或 src/favicon.ico；否则使用远程 URL
+        let faviconHref = "https://lacorda.github.io/img/favicon.ico";
+        try {
+          const iconCandidates = [
+            path.join(root, "src", "favicon.icon"),
+            path.join(root, "src", "favicon.ico"),
+          ];
+          let iconPath: string | undefined;
+          for (const c of iconCandidates) {
+            if (fs.existsSync(c)) {
+              iconPath = c;
+              break;
+            }
+          }
+          if (iconPath) {
+            const buf = fs.readFileSync(iconPath);
+            const b64 = buf.toString("base64");
+            faviconHref = `data:image/x-icon;base64,${b64}`;
+          }
+        } catch {}
+
+        const html = buildHtml(all, used, mode, projectName, faviconHref);
         const jsonStr = JSON.stringify(jsonObj, null, 2);
         this.currentHtml = html;
         if (this.options.outputJson) this.currentJson = jsonStr;
@@ -344,12 +366,46 @@ export class AssetsManagerPlugin {
       const ensureServer = () => {
         if (mode === "watch" && !this.server) {
           this.server = http.createServer((req, res) => {
-            res.setHeader("Content-Type", "text/html; charset=utf-8");
-            res.writeHead(200);
-            res.end(
-              this.currentHtml ||
-                "<!doctype html><html><body><p>报告尚未生成</p></body></html>"
-            );
+            try {
+              const urlStr = req.url || "/";
+              const u = new URL(urlStr, `http://localhost:${this.serverPort}`);
+              if (u.pathname === "/preview") {
+                const p = u.searchParams.get("path");
+                if (p && fs.existsSync(p)) {
+                  const ext = path.extname(p).toLowerCase();
+                  const type =
+                    ext === ".png"
+                      ? "image/png"
+                      : ext === ".jpg" || ext === ".jpeg"
+                      ? "image/jpeg"
+                      : ext === ".gif"
+                      ? "image/gif"
+                      : ext === ".svg"
+                      ? "image/svg+xml"
+                      : ext === ".webp"
+                      ? "image/webp"
+                      : "image/x-icon";
+                  res.statusCode = 200;
+                  res.setHeader("Content-Type", type);
+                  fs.createReadStream(p).pipe(res);
+                  return;
+                }
+                res.statusCode = 404;
+                res.setHeader("Content-Type", "text/plain; charset=utf-8");
+                res.end("Not Found");
+                return;
+              }
+              res.setHeader("Content-Type", "text/html; charset=utf-8");
+              res.statusCode = 200;
+              res.end(
+                this.currentHtml ||
+                  "<!doctype html><html><body><p>报告尚未生成</p></body></html>"
+              );
+            } catch {
+              res.statusCode = 500;
+              res.setHeader("Content-Type", "text/plain; charset=utf-8");
+              res.end("Server Error");
+            }
           });
           this.server.listen(this.serverPort, () => {
             console.log(
@@ -364,10 +420,6 @@ export class AssetsManagerPlugin {
       const processAssets = compilation.hooks.processAssets;
       const stageSummarize = wp?.Compilation?.PROCESS_ASSETS_STAGE_SUMMARIZE;
       if (!processAssets || !stageSummarize) {
-        console.log(
-          "[AssetsManager] 使用旧版兼容路径（emit），不支持 processAssets/PROCESS_ASSETS_STAGE_SUMMARIZE"
-        );
-
         compiler.hooks.emit.tap(pluginName, (comp: any) => {
           const { html, jsonStr } = generate(comp);
 
@@ -376,10 +428,6 @@ export class AssetsManagerPlugin {
             source: () => html,
             size: () => Buffer.byteLength(html),
           } as any;
-          console.log(
-            "[AssetsManager] 输出 HTML 报告",
-            path.join(compiler.outputPath || process.cwd(), htmlName)
-          );
 
           this.currentHtml = html;
 
@@ -388,10 +436,6 @@ export class AssetsManagerPlugin {
               source: () => jsonStr,
               size: () => Buffer.byteLength(jsonStr),
             } as any;
-            console.log(
-              "[AssetsManager] 输出 JSON 报告",
-              path.join(compiler.outputPath || process.cwd(), jsonName)
-            );
           }
 
           ensureServer();
@@ -412,19 +456,10 @@ export class AssetsManagerPlugin {
 
           if (this.options.outputJson) {
             compilation.emitAsset(jsonName, new sources.RawSource(jsonStr));
-            console.log(
-              "[AssetsManager] 输出 JSON 报告",
-              path.join(compiler.outputPath || process.cwd(), jsonName)
-            );
           }
 
           // 输出 HTML 报告
           compilation.emitAsset(htmlName, new sources.RawSource(html));
-
-          console.log(
-            "[AssetsManager] 输出 HTML 报告",
-            path.join(compiler.outputPath || process.cwd(), htmlName)
-          );
 
           ensureServer();
         }
@@ -439,33 +474,31 @@ export class AssetsManagerPlugin {
         if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
         if (!fs.existsSync(htmlPath)) {
           fs.writeFileSync(htmlPath, this.currentHtml || "");
-          console.log("[AssetsManager] 写入 HTML 报告到输出目录", htmlPath);
         }
 
         if (this.options.outputJson) {
           const jsonPath = path.join(outDir, jsonName);
           if (!fs.existsSync(jsonPath)) {
             fs.writeFileSync(jsonPath, this.currentJson || "{}");
-            console.log("[AssetsManager] 写入 JSON 报告到输出目录", jsonPath);
           }
         }
       } catch {}
 
       if (!this.options.openInBrowser) {
-        console.log("[AssetsManager] 未开启自动打开，跳过打开报告");
         return;
       }
 
       if (mode === "watch") {
         const url = `http://localhost:${this.serverPort}/`;
-        console.log("[AssetsManager] 打开服务地址", url);
+        console.log("[AssetsManager] 打开浏览器", url);
         openFileInBrowser(url);
         return;
       }
 
-      console.log("[AssetsManager] 准备打开报告", htmlPath);
+      console.log("[AssetsManager] 打开浏览器", htmlPath);
       if (fs.existsSync(htmlPath)) openFileInBrowser(htmlPath);
-      else console.log("[AssetsManager] 报告文件不存在，跳过");
+      else {
+      }
     });
   }
 }
